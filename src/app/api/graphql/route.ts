@@ -60,11 +60,9 @@ const typeDefs = gql`
     name: String
     email: String
     avatar: String
-    role: String
     analysesDone: Int
   }
   type Quota {
-    role: String
     used: Int
     max: Int
     remaining: Int
@@ -87,7 +85,7 @@ const resolvers = {
     getReports: getReports,
     myReports: myReports,
     myQuota: async (_: any, __: any, context: any) => {
-      return { role: 'pro', used: 0, max: 0, remaining: 0, unlimited: true };
+      return { used: 0, max: 0, remaining: 0, unlimited: true };
     }
   },
   Mutation: {
@@ -108,19 +106,13 @@ const resolvers = {
         const user = await db.user.findUnique({ where: { clerkId: userId } });
         if (!user) return { success: false, message: 'User not found' };
 
-        const role = user.role === 'pro' ? 'pro' : 'free';
         let used = user.analysesDone || 0;
-        const max = role === 'free' ? 10 : Number.POSITIVE_INFINITY;
-        const remaining = role === 'free' ? Math.max(0, 10 - used) : Number.POSITIVE_INFINITY;
-        if (role === 'free' && remaining <= 0) {
-          return { success: false, message: 'Free plan limit reached: 10 analyses' };
-        }
 
         const toImport = Array.isArray(args.items) ? args.items : [];
         if (toImport.length === 0) return { success: true, message: 'Nothing to migrate' };
 
-        const allowed = role === 'free' ? Math.min(remaining, toImport.length) : toImport.length;
-        const slice = toImport.slice(0, allowed);
+        // No limits for anyone now
+        const slice = toImport;
 
         for (const it of slice) {
           await db.scan.create({
@@ -137,9 +129,9 @@ const resolvers = {
           used += 1;
         }
 
-        if (role === 'free') {
-          await db.user.update({ where: { id: user.id }, data: { analysesDone: used } });
-        }
+        await db.user.update({ where: { id: user.id }, data: { analysesDone: used } });
+
+        return { success: true, message: `Migrated ${slice.length} analyses.` };
 
         const skipped = toImport.length - slice.length;
         const msg = skipped > 0 ? `Migrated ${slice.length}, skipped ${skipped} (limit).` : `Migrated ${slice.length} analyses.`;

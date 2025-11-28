@@ -120,12 +120,10 @@ export async function POST(req: Request) {
         scanId = scan.id;
 
         // Increment usage
-        if (user.role !== 'pro') {
-          await db.user.update({
-            where: { id: user.id },
-            data: { analysesDone: { increment: 1 } }
-          });
-        }
+        await db.user.update({
+          where: { id: user.id },
+          data: { analysesDone: { increment: 1 } }
+        });
       }
     }
 
