@@ -29,6 +29,30 @@ export const metadata: Metadata = {
   title: "VerifAI",
   description: "Deepfake image detection and media authenticity checks powered by Gemini.",
   metadataBase: new URL(APP_URL),
+  keywords: [
+    "VerifAI",
+    "deepfake detection",
+    "AI deepfake detector",
+    "image authenticity",
+    "media verification",
+    "AI content detection",
+    "fake image detector",
+    "deep fake checker",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      maxSnippet: -1,
+      maxImagePreview: "large",
+      maxVideoPreview: -1,
+    },
+  },
   openGraph: {
     title: "VerifAI — AI-Powered Deepfake Detection",
     description: "Upload images to detect deepfakes, assess authenticity, and get a clear confidence score.",
