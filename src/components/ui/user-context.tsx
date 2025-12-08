@@ -39,21 +39,46 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     (async () => {
       try {
-        const query = `query { myQuota { role used max remaining unlimited } me { name email } }`;
-        const res = await fetch('/api/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ query }) });
+        const query = `query { myQuota { used max remaining unlimited } me { name email } }`;
+        const res = await fetch('/api/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ query }),
+        });
         const json = await res.json();
-        const q = json?.data?.myQuota;
-        const me = json?.data?.me;
+        const q = json?.data?.myQuota || null;
+        const me = json?.data?.me || null;
         if (!mounted) return;
-        if (q && q.role === 'pro') {
-          setState({ loading: false, name: me?.name || null, email: me?.email || null, role: 'pro', used: 0, max: null, remaining: null, unlimited: true });
-        } else {
-          // free
-          setState({ loading: false, name: me?.name || null, email: me?.email || null, role: 'free', used: q.used || 0, max: q.max || 10, remaining: q.remaining || 0, unlimited: false });
-        }
+
+        // For VerifAI v1, everyone is effectively "free" with unlimited scans.
+        const used = q?.used ?? 0;
+        const max = q?.max ?? null;
+        const remaining = q?.remaining ?? null;
+        const unlimited = q?.unlimited ?? true;
+
+        setState({
+          loading: false,
+          name: me?.name || null,
+          email: me?.email || null,
+          role: 'free',
+          used,
+          max,
+          remaining,
+          unlimited,
+        });
       } catch {
         if (!mounted) return;
-        setState({ loading: false, name: null, email: null, role: 'free', used: 0, max: 10, remaining: 10, unlimited: false });
+        setState({
+          loading: false,
+          name: null,
+          email: null,
+          role: 'free',
+          used: 0,
+          max: 10,
+          remaining: 10,
+          unlimited: false,
+        });
       }
     })();
     return () => { mounted = false };

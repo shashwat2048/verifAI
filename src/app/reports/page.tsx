@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import gql from "graphql-tag";
 import { useAuth } from "@clerk/nextjs";
 import { ChevronDown, Share2, Scan, History } from "lucide-react";
 import { LoaderFive } from "@/components/ui/loader";
-import AccessGateBanner from "@/components/ui/access-gate-banner";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
@@ -90,7 +90,6 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
-      <AccessGateBanner />
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold text-slate-50">Your Scan History</h1>
         <p className="text-sm text-slate-300">Recent image scans with authenticity verdicts, signals, and explanations.</p>
@@ -107,10 +106,20 @@ export default function ReportsPage() {
               >
                 <div className="relative h-48 overflow-hidden bg-muted">
                   {r.imageUrl ? (
-                    <img src={r.imageUrl} alt="report" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <img
+                      src={r.imageUrl}
+                      alt="Scan image"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <Scan className="w-8 h-8 opacity-20" />
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Image
+                        src="/page.png"
+                        alt="Text scan"
+                        width={100}
+                        height={100}
+                        className="opacity-70 w-full h-full object-cover"
+                      />
                     </div>
                   )}
                   <div className="absolute top-3 right-3">

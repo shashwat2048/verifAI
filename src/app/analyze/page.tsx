@@ -33,6 +33,7 @@ export default function AnalyzePage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const [torchOn, setTorchOn] = useState(false);
+  const [textInput, setTextInput] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -193,7 +194,7 @@ export default function AnalyzePage() {
     try {
       const freeLimitHit = quota && !quota.unlimited && quota.role === 'free' && quota.remaining <= 0;
       if (freeLimitHit) {
-        toast.error(`Free plan limit reached. Upgrade to Pro for unlimited analyses.`);
+        toast.error(`You’ve reached your current scan limit. Please try again later.`);
         setBusy(false);
         return;
       }
@@ -243,6 +244,71 @@ export default function AnalyzePage() {
       }
     } catch (e: any) {
       const msg = e?.message?.includes('limit') ? e.message : (e?.message || "Upload failed");
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubmitText() {
+    if (!textInput.trim()) {
+      toast.error("Please paste some text to analyze.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const freeLimitHit = quota && !quota.unlimited && quota.role === 'free' && quota.remaining <= 0;
+      if (freeLimitHit) {
+        toast.error(`You’ve reached your current scan limit. Please try again later.`);
+        setBusy(false);
+        return;
+      }
+
+      const query = `mutation AnalyzeText($input: String!) {
+        analyzeText(input: $input) {
+          isDeepfake
+          confidence
+          explanation
+          saved
+          scanId
+        }
+      }`;
+
+      const res = await fetch('/api/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query, variables: { input: textInput } }),
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || "Failed to analyze text");
+      }
+
+      const json = await res.json();
+      if (json?.errors?.length) {
+        const msg = json.errors[0]?.message || 'Request failed';
+        throw new Error(msg);
+      }
+
+      const data = json?.data?.analyzeText;
+      if (!data) throw new Error('No result');
+
+      const structured = {
+        isDeepfake: Boolean(data.isDeepfake),
+        confidence: typeof data.confidence === "number" ? data.confidence : 0,
+        explanation: data.explanation || "",
+        saved: data.saved,
+      };
+
+      setResult(structured);
+      toast.success(data.saved ? "Text scan saved" : "Text analysis ready");
+    } catch (e: any) {
+      const msg = e?.message || "Text analysis failed";
       setError(msg);
       toast.error(msg);
     } finally {
@@ -379,58 +445,123 @@ export default function AnalyzePage() {
 
       {/* Right Panel - Results/Preview */}
       <div className="w-full lg:w-1/2 bg-muted/30 p-6 lg:p-12 overflow-y-auto">
-        <div className="max-w-xl mx-auto w-full h-full flex flex-col">
-          {busy ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 min-h-[400px]">
-              <LoaderFive text="" />
-              <div>
-                <h3 className="text-xl font-semibold text-foreground">Analyzing Media</h3>
-                <p className="text-muted-foreground mt-2 max-w-xs mx-auto">Our AI is checking for compression artifacts, lighting inconsistencies, and metadata anomalies.</p>
-              </div>
+        <div className="max-w-xl mx-auto w-full h-full flex flex-col gap-6">
+          {/* Text Analysis Card */}
+          <div className="rounded-3xl border border-border bg-card p-4 sm:p-5 shadow-sm">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">Text Deepfake Scan</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3">
+              Paste any text (posts, messages, articles) to check if it reads like AI-generated or manipulated content.
+            </p>
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              rows={4}
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
+              placeholder="Paste the text you want to verify..."
+            />
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onSubmitText}
+                className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 disabled:opacity-50"
+              >
+                {busy ? "Analyzing..." : "Run Text Scan"}
+              </button>
             </div>
-          ) : result ? (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-foreground">Analysis Results</h2>
-                <div className="flex gap-2">
-                  <SaveShareBar
-                    canSave={!result.saved}
-                    onSave={onSubmit}
-                    onShare={() => navigator.share ? navigator.share({ title: 'VerifAI Scan Result', text: 'Deepfake detection result from VerifAI' }).catch(() => { }) : null}
-                    onUpgrade={() => window.location.href = '/profile'}
-                    plan={quota ? (quota.unlimited ? 'pro' : 'free') : 'free'}
-                  />
-                </div>
-              </div>
+          </div>
 
-              {/* Verdict Card */}
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex items-start justify-between mb-6">
+          {/* Results / Placeholder */}
+          <div className="flex-1 flex">
+            <div className="w-full flex flex-col">
+              {busy ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 min-h-[400px]">
+                  <LoaderFive text="" />
                   <div>
-                    <div className="text-sm text-muted-foreground font-medium uppercase tracking-wider mb-1">Authenticity Verdict</div>
-                    <div className={`text-3xl font-bold ${result.isDeepfake ? 'text-destructive' : 'text-emerald-500'}`}>
-                      {result.isDeepfake ? 'Likely Fake' : 'Likely Real'}
+                    <h3 className="text-xl font-semibold text-foreground">Analyzing Media</h3>
+                    <p className="text-muted-foreground mt-2 max-w-xs mx-auto">
+                      Our AI is checking for compression artifacts, lighting inconsistencies, and metadata anomalies.
+                    </p>
+                  </div>
+                </div>
+              ) : result ? (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-foreground">Analysis Results</h2>
+                    <div className="flex gap-2">
+                      <SaveShareBar
+                        canSave={!result.saved}
+                        onSave={onSubmit}
+                        onShare={() =>
+                          navigator.share
+                            ? navigator
+                                .share({
+                                  title: "VerifAI Scan Result",
+                                  text: "Deepfake detection result from VerifAI",
+                                })
+                                .catch(() => {})
+                            : null
+                        }
+                      />
                     </div>
                   </div>
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shadow-inner ${result.isDeepfake ? 'bg-destructive/10 text-destructive' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                    {result.confidence}%
+
+                  {/* Verdict Card */}
+                  <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+                    <div className="flex items-start justify-between mb-6">
+                      <div>
+                        <div className="text-sm text-muted-foreground font-medium uppercase tracking-wider mb-1">
+                          Authenticity Verdict
+                        </div>
+                        <div
+                          className={`text-3xl font-bold ${
+                            result.isDeepfake ? "text-destructive" : "text-emerald-500"
+                          }`}
+                        >
+                          {result.isDeepfake ? "Likely Fake" : "Likely Real"}
+                        </div>
+                      </div>
+                      <div
+                        className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shadow-inner ${
+                          result.isDeepfake ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-500"
+                        }`}
+                      >
+                        {result.confidence}%
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed text-foreground">
+                      {result.explanation}
+                    </div>
                   </div>
                 </div>
-                <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed text-foreground">
-                  {result.explanation}
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 min-h-[400px] opacity-50">
+                  <div className="w-16 h-16 rounded-3xl bg-muted flex items-center justify-center mb-4">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-muted-foreground"
+                    >
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      <line x1="21" x2="9" y1="5" y2="17" />
+                      <line x1="9" x2="9" y1="17" y2="17" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium">No analysis yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    Upload an image or paste text on the left to run a deepfake detection scan.
+                  </p>
                 </div>
-              </div>
-
+              )}
             </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 min-h-[400px] opacity-50">
-              <div className="w-16 h-16 rounded-3xl bg-muted flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /><line x1="21" x2="9" y1="5" y2="17" /><line x1="9" x2="9" y1="17" y2="17" /></svg>
-              </div>
-              <h3 className="text-lg font-medium">No analysis yet</h3>
-              <p className="text-sm text-muted-foreground max-w-xs">Upload an image to see deepfake detection results here.</p>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { gql } from "graphql-tag";
 import { getUser, me, updateUser, getProfile, createOrUpdateProfile } from "./resolvers/user";
 import { updateUserProfile } from "./resolvers/user";
 import { analyzeLabel } from "./resolvers/user";
+import { analyzeText } from "./resolvers/user";
 import { myReports, getReports } from "./resolvers/user";
 import { getAuth } from "@clerk/nextjs/server";
 import { deleteReport } from "./resolvers/feature";
@@ -28,6 +29,7 @@ const typeDefs = gql`
     createOrUpdateProfile: Response
     updateUserProfile(name: String): Response
     analyzeLabel(imageBase64: String!): AnalyzeResult
+    analyzeText(input: String!): AnalyzeResult
     deleteReport(id: String!): Response
     migrateGuestAnalyses(items: [GuestAnalysisInput!]!): Response
   }
@@ -96,6 +98,11 @@ const resolvers = {
       // Enforce RBAC and quotas before calling resolver
       await enforceAnalyzeQuota(context.req, context.auth);
       return analyzeLabel(_, args, context);
+    },
+    analyzeText: async (_: any, args: { input: string }, context: any) => {
+      // Enforce RBAC and quotas before calling resolver
+      await enforceAnalyzeQuota(context.req, context.auth);
+      return analyzeText(_, args, context);
     },
     deleteReport: deleteReport,
 

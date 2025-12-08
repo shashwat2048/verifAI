@@ -39,7 +39,7 @@ export default function Navbar() {
           <nav className="hidden justify-center sm:flex items-center gap-4 text-sm text-muted-foreground">
             <Link href="/" className="hover:text-primary transition transform duration-200">Home</Link>
             <Link href="/analyze" className="hover:text-primary transition transform duration-200">Scan</Link>
-            <Link href="/reports" className="hover:text-primary transition transform duration-200">History</Link>
+            <Link href="/reports" className="hover:text-primary transition transform duration-200">Reports</Link>
           </nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">

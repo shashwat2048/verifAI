@@ -54,9 +54,9 @@ export const metadata: Metadata = {
     creator: "@verifai",
   },
   icons: {
-    icon: "/favicon.png",
-    apple: "/favicon.png",
-    shortcut: "/favicon.png",
+    icon: "/verifai_logo.ico",
+    apple: "/verifai_logo.ico",
+    shortcut: "/verifai_logo.ico",
   },
 };
 

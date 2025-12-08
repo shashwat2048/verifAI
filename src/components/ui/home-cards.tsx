@@ -21,11 +21,12 @@ export default function HomeCards() {
 
   return (
     <section className="mx-auto max-w-6xl px-4 pb-20">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 auto-rows-[180px]">
-        {/* Large Scan Card */}
+      {/* 1 column on mobile, 2 columns on md+; let height grow naturally so text isn't clipped */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
+        {/* Scan Card */}
         <Link
           href="/analyze"
-          className="group relative md:col-span-2 md:row-span-2 rounded-3xl border border-border bg-gradient-to-br from-card to-primary/5 p-8 flex flex-col justify-between overflow-hidden hover:shadow-[0_0_40px_rgba(96,34,237,0.2)] hover:border-primary/30 transition-all duration-500"
+          className="group relative rounded-3xl border border-border bg-gradient-to-br from-card to-primary/5 p-8 flex flex-col justify-between overflow-hidden hover:shadow-[0_0_40px_rgba(96,34,237,0.2)] hover:border-primary/30 transition-all duration-500"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all duration-500 group-hover:bg-primary/20" />
 
@@ -42,59 +43,8 @@ export default function HomeCards() {
           </div>
         </Link>
 
-        {/* History Card */}
-        <Link
-          href="/reports"
-          className="group relative md:col-span-1 md:row-span-2 rounded-3xl border border-border bg-card p-6 flex flex-col overflow-hidden hover:shadow-lg hover:border-primary/20 transition-all duration-300"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-secondary/10 text-secondary-foreground group-hover:bg-secondary/20 transition-colors">
-              <History className="w-5 h-5" />
-            </div>
-          </div>
-          <h3 className="text-xl font-semibold text-foreground mb-1">History</h3>
-          <p className="text-sm text-muted-foreground mb-6">Recent scans</p>
-
-          <div className="flex-1 space-y-3">
-            {recent.length > 0 ? (
-              recent.map((r, i) => (
-                <div key={r.id} className="p-3 rounded-xl bg-muted/30 border border-border/50 text-sm flex items-center justify-between hover:bg-muted/50 transition-colors">
-                  <div>
-                    <div className="font-medium text-foreground truncate">Scan #{r.id.slice(-4)}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${r.isDeepfake ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
-                    {r.isDeepfake ? 'FAKE' : 'REAL'}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground/50 italic">
-                <History className="w-8 h-8 mb-2 opacity-20" />
-                No recent history
-              </div>
-            )}
-          </div>
-        </Link>
-
-        {/* Profile Card */}
-        <Link
-          href="/profile"
-          className="group relative md:col-span-1 rounded-3xl border border-border bg-card p-6 flex flex-col justify-between hover:border-primary/30 hover:bg-muted/30 transition-all duration-300"
-        >
-          <div className="flex items-center gap-4">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 group-hover:scale-110 transition-transform">
-              <User className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground">Profile</h3>
-              <p className="text-xs text-muted-foreground">Manage settings</p>
-            </div>
-          </div>
-        </Link>
-
         {/* Tips Card */}
-        <div className="group relative md:col-span-2 rounded-3xl border border-border bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-6 hover:border-emerald-500/20 transition-all duration-300">
+        <div className="group relative rounded-3xl border border-border bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-6 hover:border-emerald-500/20 transition-all duration-300">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 shrink-0 group-hover:rotate-12 transition-transform duration-500">
             <Lightbulb className="w-6 h-6" />
           </div>
