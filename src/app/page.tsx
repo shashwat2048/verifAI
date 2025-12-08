@@ -6,6 +6,9 @@ import HomeCards from "@/components/ui/home-cards";
 import WelcomeName from "@/components/ui/welcome-name";
 import AccessGateBanner from "@/components/ui/access-gate-banner";
 
+// This page uses `headers()` indirectly via `getUserFromCookies`, so mark it dynamic
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const user = await getUserFromCookies();
   const { userId: clerkId } = await auth();

@@ -1,7 +1,7 @@
 import gql from "graphql-tag";
 import { GraphQLClient } from "graphql-request";
 import { headers } from "next/headers";
-import { User } from "../../generated/prisma";
+import type { User } from "@prisma/client";
 import { auth } from "@clerk/nextjs/server";
 
 
