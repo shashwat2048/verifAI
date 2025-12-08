@@ -22,8 +22,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Resolve absolute app URL for social metadata (works on Vercel and locally)
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+// Resolve absolute app URL for social metadata
+// Default to production deployment if env is not set
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://verifai-ai.vercel.app";
 
 export const metadata: Metadata = {
   title: "VerifAI",
