@@ -27,8 +27,11 @@ const geistMono = Geist_Mono({
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://verifai-ai.vercel.app";
 
 export const metadata: Metadata = {
-  title: "VerifAI",
-  description: "Deepfake image detection and media authenticity checks powered by Gemini.",
+  title: {
+    default: "VerifAI — AI-Powered Deepfake Detection",
+    template: "%s | VerifAI",
+  },
+  description: "Deepfake image detection and media authenticity checks for images and text, powered by Gemini.",
   metadataBase: new URL(APP_URL),
   keywords: [
     "VerifAI",
@@ -56,15 +59,21 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "VerifAI — AI-Powered Deepfake Detection",
-    description: "Upload images to detect deepfakes, assess authenticity, and get a clear confidence score.",
-    url: "/",
+    description: "Scan images and text for deepfakes, AI generation and media manipulation. Get a clear verdict, confidence score, and explanation.",
+    url: APP_URL,
     siteName: "VerifAI",
     images: [
       {
-        url: `${APP_URL}/verifai_logo.png`,
+        url: `${APP_URL}/verifai1.png`,
         width: 1200,
         height: 630,
-        alt: "VerifAI",
+        alt: "VerifAI deepfake detection dashboard",
+      },
+      {
+        url: `${APP_URL}/verifai_logo.png`,
+        width: 512,
+        height: 512,
+        alt: "VerifAI logo",
       },
     ],
     type: "website",
@@ -73,8 +82,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "VerifAI — AI-Powered Deepfake Detection",
-    description: "Upload images to detect deepfakes, assess authenticity, and get a clear confidence score.",
-    images: [`${APP_URL}/verifai_logo.png`],
+    description: "Scan images and text for deepfakes, AI generation and media manipulation with VerifAI.",
+    images: [`${APP_URL}/verifai1.png`],
     site: "@verifai",
     creator: "@verifai",
   },

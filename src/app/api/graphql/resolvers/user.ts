@@ -1,23 +1,102 @@
-import db from "@/services/prisma"
-import { uploadImageBase64 } from "@/services/cloudinary"
-import { getAuth } from "@clerk/nextjs/server"
-import { verifyToken } from "@/services/jwt"
+import db from "@/services/prisma";
+import { uploadImageBase64 } from "@/services/cloudinary";
+import { clerkClient, getAuth } from "@clerk/nextjs/server";
+import { verifyToken } from "@/services/jwt";
 import { GoogleGenAI } from "@google/genai";
 
-export async function me(_: any, __: any, context: { auth?: { userId?: string } }) {
+/**
+ * Ensure there is a corresponding Prisma User row for the given Clerk user.
+ * This is the central place that auto-provisions a user on first sign-in.
+ */
+async function ensureUserForClerkId(clerkId: string) {
+  if (!clerkId) return null;
+  try {
+    // 1) Look up any existing DB user
+    const existing = await db.user.findUnique({ where: { clerkId } });
+
+    // 2) Try to hydrate from Clerk so we have real email + name
+    let email = existing?.email || `${clerkId}@example.com`;
+    let name = existing?.name || "User";
+
     try {
-        const clerkId = context?.auth?.userId;
-        if (!clerkId) return null;
+      // In the current Clerk Next.js SDK, `clerkClient` is a function that returns a ClerkClient.
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(clerkId);
+      const primaryEmail =
+        clerkUser.emailAddresses.find(
+          (e) => e.id === clerkUser.primaryEmailAddressId
+        ) || clerkUser.emailAddresses[0];
 
-        const user = await db.user.findUnique({
-            where: { clerkId },
-        });
-
-        return user;
-    } catch (err) {
-        console.error(err);
-        return null;
+      if (primaryEmail?.emailAddress) {
+        email = primaryEmail.emailAddress;
+      }
+      if (clerkUser.fullName || clerkUser.firstName) {
+        name = (clerkUser.fullName || clerkUser.firstName || name).slice(0, 80);
+      }
+    } catch (e) {
+      // If Clerk lookup fails for any reason, just fall back to synthetic values.
+      console.warn("Failed to hydrate user from Clerk; using fallback values", e);
     }
+
+    // 3) Create or gently update the DB record.
+    //    We only overwrite "placeholder" values so we don't clobber user-edited names.
+    if (!existing) {
+      try {
+        return await db.user.create({
+          data: {
+            clerkId,
+            email,
+            name,
+          },
+        });
+      } catch (e: any) {
+        // Handle race conditions / duplicates gracefully:
+        // if another request just created the same user (by clerkId or email),
+        // fall back to returning the existing record instead of throwing.
+        if (e?.code === "P2002") {
+          const byClerk = await db.user.findUnique({ where: { clerkId } });
+          if (byClerk) return byClerk;
+          const byEmail = await db.user.findFirst({ where: { email } });
+          if (byEmail) return byEmail;
+        }
+        throw e;
+      }
+    }
+
+    const needsEmailUpdate =
+      !existing.email || existing.email.endsWith("@example.com");
+    const needsNameUpdate =
+      !existing.name || existing.name === "User";
+
+    if (needsEmailUpdate || needsNameUpdate) {
+      return await db.user.update({
+        where: { clerkId },
+        data: {
+          email: needsEmailUpdate ? email : existing.email,
+          name: needsNameUpdate ? name : existing.name,
+        },
+      });
+    }
+
+    return existing;
+  } catch (err) {
+    console.error("Failed to ensure user for Clerk ID", clerkId, err);
+    return null;
+  }
+}
+
+export async function me(_: any, __: any, context: { auth?: { userId?: string } }) {
+  try {
+    const clerkId = context?.auth?.userId;
+    if (!clerkId) return null;
+
+    // Auto-create the user record on first authenticated access.
+    const user = await ensureUserForClerkId(clerkId);
+    return user;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
 }
 
 export async function getUser(_: any, args: {
@@ -49,7 +128,8 @@ export async function updateUser(_: any, args: {
         if (!clerkId) {
             return { success: false, message: "Unauthorized" };
         }
-        const current = await db.user.findUnique({ where: { clerkId } });
+        // Make sure there is always a backing user row.
+        const current = await ensureUserForClerkId(clerkId);
         if (!current || current.id !== args.id) {
             return { success: false, message: "invalid action" };
         }
@@ -78,7 +158,8 @@ export async function getProfile(_: any, __: any, context: { auth?: { userId?: s
     try {
         const clerkId = context?.auth?.userId;
         if (!clerkId) return null;
-        const user = await db.user.findUnique({ where: { clerkId } });
+        // Ensure the user exists; this covers first visits after sign-up.
+        const user = await ensureUserForClerkId(clerkId);
         if (!user) return null;
         return {
             name: user.name,
@@ -100,17 +181,8 @@ export async function createOrUpdateProfile(
         if (!clerkId) {
             return { success: false, message: "Unauthorized" };
         }
-        const existing = await db.user.findUnique({ where: { clerkId } });
-
-        if (!existing) {
-            await db.user.create({
-                data: {
-                    clerkId,
-                    email: `${clerkId}@example.com`,
-                    name: "User",
-                }
-            });
-        }
+        // Delegate to central helper so behaviour stays consistent.
+        await ensureUserForClerkId(clerkId);
         return { success: true, message: "Profile saved" };
     } catch (err) {
         console.error(err);
@@ -142,17 +214,8 @@ export async function updateUserProfile(
         if (typeof args.name !== 'undefined' && args.name !== null) data.name = String(args.name).trim().slice(0, 80);
 
         // Ensure user exists; create if missing (use webhook in prod but safe-guard here)
-        const existing = await db.user.findUnique({ where: { clerkId } });
-        if (!existing) {
-            await db.user.create({
-                data: {
-                    clerkId,
-                    email: `${clerkId}@example.com`,
-                    name: data.name || "User",
-                    ...data,
-                },
-            });
-        } else {
+        const existing = await ensureUserForClerkId(clerkId);
+        if (existing) {
             await db.user.update({ where: { clerkId }, data });
         }
         return { success: true, message: "Profile updated" };
