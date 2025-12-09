@@ -24,11 +24,11 @@ export default async function Home() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">
-            Not sure if an image is real? <span className="text-primary">We’ve got you.</span>
+          Not sure if what you’re seeing is real? <br /><span className="text-primary">We’ve got you.</span>
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            VerifAI scans images for signs of deepfakes or AI generation, returning an authenticity verdict, confidence score, and clear explanation you can trust.
+          Spot the fake. Verify the fact. Get the complete picture behind every pixel and paragraph.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
