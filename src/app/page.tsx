@@ -5,6 +5,7 @@ import HomeHeroActions from "@/components/ui/home-hero-actions";
 import HomeCards from "@/components/ui/home-cards";
 import WelcomeName from "@/components/ui/welcome-name";
 import AccessGateBanner from "@/components/ui/access-gate-banner";
+import Squares from "@/components/Squares";
 
 // This page uses `headers()` indirectly via `getUserFromCookies`, so mark it dynamic
 export const dynamic = "force-dynamic";
@@ -42,10 +43,16 @@ export default async function Home() {
           </div>
         </div>
 
-        {/* Background Gradients */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-7xl -z-10 pointer-events-none">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-[100px]" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-secondary/10 rounded-full blur-[100px]" />
+        {/* Animated Squares Background */}
+        <div className="absolute inset-0 z-0 pointer-events-auto">
+          <Squares
+            speed={0.5}
+            squareSize={32}
+            direction="diagonal"
+            borderColor="#fff"
+            hoverFillColor="#7C5CFF"
+            className="w-full h-full opacity-10"
+          />
         </div>
       </section>
 
