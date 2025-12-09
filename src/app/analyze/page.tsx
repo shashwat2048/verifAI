@@ -508,30 +508,53 @@ export default function AnalyzePage() {
 
                   {/* Verdict Card */}
                   <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-                    <div className="flex items-start justify-between mb-6">
-                      <div>
-                        <div className="text-sm text-muted-foreground font-medium uppercase tracking-wider mb-1">
-                          Authenticity Verdict
-                        </div>
-                        <div
-                          className={`text-3xl font-bold ${
-                            result.isDeepfake ? "text-destructive" : "text-emerald-500"
-                          }`}
-                        >
-                          {result.isDeepfake ? "Likely Fake" : "Likely Real"}
-                        </div>
-                      </div>
-                      <div
-                        className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shadow-inner ${
-                          result.isDeepfake ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-500"
-                        }`}
-                      >
-                        {result.confidence}%
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed text-foreground">
-                      {result.explanation}
-                    </div>
+                    {(() => {
+                      const raw = typeof result.confidence === "number" ? result.confidence : 0;
+                      // Interpret confidence as: how sure the model is about its deepfake vs real verdict.
+                      // For display, we want "AI-likeness": 0% = very likely real, 100% = very likely AI/deepfake.
+                      const aiPercent = Math.min(
+                        100,
+                        Math.max(0, Math.round(result.isDeepfake ? raw : 100 - raw))
+                      );
+
+                      return (
+                        <>
+                          <div className="flex items-start justify-between mb-6">
+                            <div>
+                              <div className="text-sm text-muted-foreground font-medium uppercase tracking-wider mb-1">
+                                Authenticity Verdict
+                              </div>
+                              <div
+                                className={`text-3xl font-bold ${
+                                  result.isDeepfake ? "text-destructive" : "text-emerald-500"
+                                }`}
+                              >
+                                {aiPercent >= 60 ? "Likely Fake" : "Likely Real"}
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {aiPercent}% chance this content is AI-generated or manipulated{" "}
+                                <span className="font-medium">
+                                  ({aiPercent < 60 ? "more likely real" : "more likely deepfake"})
+                                </span>
+                                .
+                              </p>
+                            </div>
+                            <div
+                              className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shadow-inner ${
+                                aiPercent >= 60
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-emerald-500/10 text-emerald-500"
+                              }`}
+                            >
+                              {aiPercent}%
+                            </div>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed text-foreground">
+                            {result.explanation}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (

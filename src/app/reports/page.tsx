@@ -28,10 +28,15 @@ export default function ReportsPage() {
 
   async function shareReport(r: Report) {
     try {
+      const raw = typeof r.confidence === "number" ? r.confidence : 0;
+      const aiPercent = Math.min(
+        100,
+        Math.max(0, Math.round(r.isDeepfake ? raw : 100 - raw))
+      );
       const summary = [
         `VerifAI Scan Result`,
-        `Verdict: ${r.isDeepfake ? 'Likely Fake' : 'Likely Real'}`,
-        `Confidence: ${r.confidence}%`,
+        `Verdict: ${aiPercent >= 60 ? 'Likely Fake' : 'Likely Real'}`,
+        `AI likelihood: ${aiPercent}%`,
         `Explanation: ${r.explanation}`,
         `Shared via VerifAI`
       ].filter(Boolean).join('\n');
@@ -140,7 +145,7 @@ export default function ReportsPage() {
 
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     <span className="text-[10px] px-2 py-1 rounded-full bg-muted/50 text-muted-foreground border border-border">
-                      Confidence: {r.confidence}%
+                      AI likelihood: {Math.min(100, Math.max(0, Math.round(r.isDeepfake ? r.confidence : 100 - r.confidence)))}%
                     </span>
                   </div>
 

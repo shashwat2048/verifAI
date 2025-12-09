@@ -283,7 +283,7 @@ The JSON must have EXACTLY these keys:
         // Prefer a single, explicitly configured model; fall back to Gemini 2.5 Flash.
         // Stable model id per docs: "gemini-2.5-flash" ([link](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)).
         const modelsToTry = [
-            process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+            process.env.GEMINI_MODEL || 'gemini-2.5-flash',
         ];
 
         let resp: any = null;
