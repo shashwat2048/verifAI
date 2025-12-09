@@ -29,7 +29,7 @@ const typeDefs = gql`
     createOrUpdateProfile: Response
     updateUserProfile(name: String): Response
     analyzeLabel(imageBase64: String!): AnalyzeResult
-    analyzeText(input: String!): AnalyzeResult
+    analyzeText(input: String!, factCheck: Boolean): AnalyzeResult
     deleteReport(id: String!): Response
     migrateGuestAnalyses(items: [GuestAnalysisInput!]!): Response
   }
@@ -99,7 +99,7 @@ const resolvers = {
       await enforceAnalyzeQuota(context.req, context.auth);
       return analyzeLabel(_, args, context);
     },
-    analyzeText: async (_: any, args: { input: string }, context: any) => {
+    analyzeText: async (_: any, args: { input: string; factCheck?: boolean }, context: any) => {
       // Enforce RBAC and quotas before calling resolver
       await enforceAnalyzeQuota(context.req, context.auth);
       return analyzeText(_, args, context);

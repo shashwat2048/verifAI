@@ -34,6 +34,7 @@ export default function AnalyzePage() {
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const [torchOn, setTorchOn] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const [factCheck, setFactCheck] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -267,8 +268,8 @@ export default function AnalyzePage() {
         return;
       }
 
-      const query = `mutation AnalyzeText($input: String!) {
-        analyzeText(input: $input) {
+      const query = `mutation AnalyzeText($input: String!, $factCheck: Boolean) {
+        analyzeText(input: $input, factCheck: $factCheck) {
           isDeepfake
           confidence
           explanation
@@ -281,7 +282,7 @@ export default function AnalyzePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: { input: textInput } }),
+        body: JSON.stringify({ query, variables: { input: textInput, factCheck } }),
       });
 
       if (!res.ok) {
@@ -459,14 +460,23 @@ export default function AnalyzePage() {
               className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
               placeholder="Paste the text you want to verify..."
             />
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <label className="inline-flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border bg-background"
+                  checked={factCheck}
+                  onChange={(e) => setFactCheck(e.target.checked)}
+                />
+                <span>Enable fact checking (verify factual accuracy instead of AI-writing detection)</span>
+              </label>
               <button
                 type="button"
                 disabled={busy}
                 onClick={onSubmitText}
                 className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 disabled:opacity-50"
               >
-                {busy ? "Analyzing..." : "Run Text Scan"}
+                {busy ? (factCheck ? "Checking facts..." : "Analyzing...") : (factCheck ? "Run Fact Check" : "Run Text Scan")}
               </button>
             </div>
           </div>

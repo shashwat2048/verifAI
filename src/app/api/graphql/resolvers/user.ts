@@ -248,29 +248,29 @@ export async function analyzeLabel(
         if (!apiKey) throw new Error('Missing API Key');
 
         const prompt = `
-You are VerifAI, a world-class digital forensics system.
-Given a single image, determine whether it is likely a deepfake or AI-generated/manipulated image.
+You are an expert image forensic engine. Your task is to analyze the provided image for technical artifacts indicating generative AI synthesis, including high-quality outputs from state-of-the-art models that may not have obvious flaws.
 
-Carefully inspect:
-- Lighting and shadows consistency
-- Skin texture, hair, eyes, teeth, and facial symmetry
-- Background warping, doubled edges, or other artifacts
-- Inconsistencies between subject and background
-- Any obvious signs of image compositing or cloning
+Perform a pixel-level analysis focusing on:
 
-Decide:
-- "isDeepfake": true  → if the image is likely AI-generated or manipulated.
-- "isDeepfake": false → if the image appears to be a real, unedited photo.
+1.  **Micro-Texture & Imperfections:** Analyze skin pores, individual hair strands, and fabric weave. Look for an unnatural absence of imperfections, skin that appears too smooth or "waxy," or inconsistent detail levels across different surfaces.
+2.  **Geometric & Structural Consistency:** Check for uncanny perfection in symmetry (e.g., glasses frames, facial features). Verify the realistic folding of fabric (collar, lapel) and the natural way accessories sit on the body.
+3.  **Lighting & Shadow Subtleties:** Look for idealized lighting that lacks complex, natural shadowing, especially in small creases (e.g., around the eyes, ears, or under the glasses frames).
+4.  **Ocular & Reflective Physics:** Examine reflections in the eyes and lenses. While they may be consistent, look for an overly sharp or "rendered" quality that doesn't match the physics of a real camera lens.
+5.  **Overall "Uncanny" Quality:** Assess the image for a feeling of hyper-realism—a picture that looks "too perfect" to be a raw photograph.
 
-Also compute:
-- "confidence": a number from 0 to 100, where:
-  - 0–39  = very low confidence
-  - 40–69 = medium confidence
-  - 70–100 = high confidence
-- "explanation": a short human-readable sentence explaining *why* you reached this conclusion.
+Based on this analysis, generate a response.
 
-Respond with ONLY a valid JSON object, no markdown, no backticks, no extra text.
-The JSON must have EXACTLY these keys:
+Output Criteria:
+
+- Set "isDeepfake" to **true** if the image exhibits signs of AI synthesis, including subtle cues like hyper-realism or a lack of natural imperfections.
+- Set "isDeepfake" to **false** only if the image appears to be an authentic photograph with natural flaws.
+- "confidence": A score (0-100) representing certainty in the visual evidence.
+- "explanation": A concise, technical sentence describing the specific artifact or subtle cue found (e.g., "Unnaturally smooth skin texture and idealized lighting suggest AI synthesis").
+
+Respond with ONLY a valid JSON object. Do not include any Markdown formatting, code fences, or backticks, and do not add any introduction or commentary.
+
+Target JSON Structure:
+
 {
   "isDeepfake": boolean,
   "confidence": number,
@@ -417,17 +417,48 @@ The JSON must have EXACTLY these keys:
 
 export async function analyzeText(
     _: any,
-    args: { input: string },
+    args: { input: string; factCheck?: boolean },
     context: { req?: Request, auth?: { userId?: string } }
 ) {
     try {
         const inputRaw = (args.input || "").trim();
         if (!inputRaw) throw new Error("No text provided");
 
-        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error('Missing API Key');
+        const factCheck = Boolean((args as any).factCheck);
 
-        const prompt = `
+        const apiKey = process.env.GEMINI_API_KEY_2 || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error('Missing API Key');
+        const now = new Date();
+        const currentDate = now.toISOString().split('T')[0];
+
+        const prompt = factCheck
+            ? `
+You are TruthSeeker, an advanced AI fact-checking assistant.
+
+### CONTEXT (CRITICAL)
+Current Date: ${currentDate}
+Use this date as the absolute reference point for all age calculations, timelines, and status checks.
+
+### Your Task
+Analyze the provided user claim and determine its factual accuracy relative to the "Current Date" provided above.
+
+### Output Format
+Respond ONLY with a valid JSON object (no markdown, no code fences).
+
+{
+  "claim": "The original claim.",
+  "verdict": "True | False | Misleading | Unverified | Needs Context",
+  "confidence_score": 0-100,
+  "analysis": "Explain the verdict. If calculating age or time passed, explicitly show the math (e.g., 'Born 1950, Current Year 2025, so Age is 75').",
+  "corrections": "Correct facts if verdict is False/Misleading.",
+  "sources": ["List authoritative sources"]
+}
+
+### Input Claim
+
+${inputRaw.slice(0, 8000)}
+`
+            : `
 You are an AI-text detector. Analyze the following text and determine the likelihood that it was written by an AI model.
 
 TEXT TO ANALYZE:
@@ -451,9 +482,9 @@ Rules:
 `;
 
         const ai = new GoogleGenAI({ apiKey });
-        const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+        const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-        console.log(`Trying Gemini text model: ${modelName}`);
+        console.log(`Trying Gemini text model (${factCheck ? "fact-check" : "detection"}): ${modelName}`);
         const resp = await ai.models.generateContent({
             model: modelName,
             contents: [
@@ -507,15 +538,48 @@ Rules:
             parsed = JSON.parse(toParse);
         } catch (e) {
             console.error("Failed to parse Gemini TEXT JSON:", e, "text was:", text);
-            parsed = { ai_probability: 0, explanation: "Failed to parse result" };
+            parsed = factCheck
+                ? {
+                    claim: inputRaw,
+                    verdict: "Unverified",
+                    confidence_score: 0,
+                    analysis: "Failed to parse result",
+                    corrections: null,
+                    sources: [],
+                }
+                : { ai_probability: 0, explanation: "Failed to parse result" };
         }
 
         console.log("Gemini text parsed JSON:", parsed);
 
-        const aiProbRaw = typeof parsed.ai_probability === "number" ? parsed.ai_probability : 0;
-        const confidence = Math.max(0, Math.min(100, aiProbRaw));
-        const isDeepfake = confidence >= 60; // treat 60%+ AI probability as likely deepfake text
-        const explanation = typeof parsed.explanation === "string" ? parsed.explanation : "";
+        let isDeepfake: boolean;
+        let confidence: number;
+        let explanation: string;
+
+        if (factCheck) {
+            const verdictRaw = typeof parsed.verdict === "string" ? parsed.verdict.trim() : "Unverified";
+            const verdict = verdictRaw || "Unverified";
+            const confRaw = typeof parsed.confidence_score === "number" ? parsed.confidence_score : 0;
+            confidence = Math.max(0, Math.min(100, confRaw));
+
+            const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
+            const corrections = typeof parsed.corrections === "string" ? parsed.corrections : "";
+
+            const parts: string[] = [];
+            parts.push(`Verdict: ${verdict}`);
+            if (analysis) parts.push(analysis);
+            if (corrections) parts.push(`Corrections: ${corrections}`);
+            explanation = parts.join(" — ");
+
+            // Treat clearly false/misleading claims as "deepfake-like" in UI; others as not.
+            const lowerVerdict = verdict.toLowerCase();
+            isDeepfake = lowerVerdict === "false" || lowerVerdict === "misleading";
+        } else {
+            const aiProbRaw = typeof parsed.ai_probability === "number" ? parsed.ai_probability : 0;
+            confidence = Math.max(0, Math.min(100, aiProbRaw));
+            isDeepfake = confidence >= 60; // treat 60%+ AI probability as likely AI-generated text
+            explanation = typeof parsed.explanation === "string" ? parsed.explanation : "";
+        }
 
         // Save scan
         const userId = context?.auth?.userId;
