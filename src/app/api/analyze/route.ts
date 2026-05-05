@@ -29,22 +29,25 @@ export async function POST(req: Request) {
       console.error("Cloudinary upload failed", e);
     }
 
-    const prompt = `You are a world-class digital forensics expert. Analyze this image for signs of AI generation or deepfake manipulation.
-    
-    Look for:
-    - Inconsistent lighting or shadows
-    - Unnatural skin textures or hair rendering
-    - Asymmetries in eyes, ears, or accessories
-    - Background anomalies or warping
-    - Metadata inconsistencies (if visible)
-    
-    Return a JSON object with:
-    - isDeepfake: boolean (true if likely AI-generated/manipulated)
-    - confidence: number (0-100, representing your certainty)
-    - explanation: string (concise explanation of your findings)
-    - signals: object (key-value pairs of specific artifacts found, e.g., "lighting": "inconsistent", "eyes": "asymmetric")
-    
-    Return ONLY valid JSON.`;
+    const prompt = `Strict forensic classifier for diffusion / AI-generated images. Users suffer false negatives when you label polished AI as real.
+
+Rules: Do not certify "real" only because the image looks sharp or professional. Err toward isDeepfake when multiple subtle cues stack (hands/teeth/edges/lighting/optics/texture/text garbling). Major anatomy or reflection failure → synthetic.
+
+Mental checklist (score weak cues across categories): anatomy & object interactions; diffusion-like texture smear; lighting vs shadows vs catchlights; depth-of-field plausibility; edge halos & background bleed; garbled text/signs; "catalog-perfect" hyper-real scenes without plausible camera microtexture.
+
+Return ONLY valid JSON:
+{
+  "isDeepfake": boolean,
+  "confidence": number,
+  "explanation": string,
+  "signals": object
+}
+
+- isDeepfake: true if likely AI/diffusion/generative composite; false only if clearly one authentic capture with no meaningful synthesis cues.
+- confidence: 0-100; stacked subtleties can justify 60-80.
+- explanation: concrete regions + artifact types.
+- signals: key-value map (e.g. "texture": "waxy_smear", "lighting": "catchlight_mismatch").`;
+
 
     const ai = new GoogleGenAI({ apiKey });
 

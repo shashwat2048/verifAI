@@ -249,28 +249,35 @@ export async function analyzeLabel(
         if (!apiKey) throw new Error('Missing API Key');
 
         const prompt = `
-You are an expert image forensic engine. Your task is to analyze the provided image for technical artifacts indicating generative AI synthesis, including high-quality outputs from state-of-the-art models that may not have obvious flaws.
+You are a strict forensic classifier for AI-generated and diffusion-based synthetic imagery. Your users get false negatives when you default to "real" on polished or hyper-realistic pictures. **Err on the side of flagging synthesis** when evidence is mixed: multiple subtle cues together strongly outweigh one "clean-looking" impression.
 
-Perform a pixel-level analysis focusing on:
+**Hard rule — do not call an image real just because it looks sharp, professional, or pretty.** Stock photography can still be real; AI often looks like idealized stock. Ask: "Would a single camera/lens plausibly produce THIS combination of texture, optics, and micro-structure everywhere in frame?"
 
-1.  **Micro-Texture & Imperfections:** Analyze skin pores, individual hair strands, and fabric weave. Look for an unnatural absence of imperfections, skin that appears too smooth or "waxy," or inconsistent detail levels across different surfaces.
-2.  **Geometric & Structural Consistency:** Check for uncanny perfection in symmetry (e.g., glasses frames, facial features). Verify the realistic folding of fabric (collar, lapel) and the natural way accessories sit on the body.
-3.  **Lighting & Shadow Subtleties:** Look for idealized lighting that lacks complex, natural shadowing, especially in small creases (e.g., around the eyes, ears, or under the glasses frames).
-4.  **Ocular & Reflective Physics:** Examine reflections in the eyes and lenses. While they may be consistent, look for an overly sharp or "rendered" quality that doesn't match the physics of a real camera lens.
-5.  **Overall "Uncanny" Quality:** Assess the image for a feeling of hyper-realism—a picture that looks "too perfect" to be a raw photograph.
+**Scoring habit:** Assign yourself a silent cue count across categories A–F below (major flaw = 2, minor suspicion = 1). If the total is **≥ 3** OR any **major** anatomical/optics failure exists → **isDeepfake: true** with confidence tied to how many categories fired. Prefer mid-high confidence (55–85) when several weak cues stack without one dramatic glitch.
 
-Based on this analysis, generate a response.
+**A. Anatomy & interaction (major when broken)**
+Hands/fingers/toes, teeth rows, ear cartilage, eyelashes vs lids, lips/teeth boundary. Glasses arms crossing hair/skin, straps merging into flesh. Extra/fused/missing digits or teeth "too perfect" (identical pearl shapes in a row).
 
-Output Criteria:
+**B. Diffusion texture & detail coherence**
+Uniform "waxy" skin; pore/detail that fades into noise at region boundaries; hair as fused ribbons/clumps with few isolated strands; fabric/weave that warps or repeats oddly; fur/feathers with painterly smear.
 
-- Set "isDeepfake" to **true** if the image exhibits signs of AI synthesis, including subtle cues like hyper-realism or a lack of natural imperfections.
-- Set "isDeepfake" to **false** only if the image appears to be an authentic photograph with natural flaws.
-- "confidence": A score (0-100) representing certainty in the visual evidence.
-- "explanation": A concise, technical sentence describing the specific artifact or subtle cue found (e.g., "Unnaturally smooth skin texture and idealized lighting suggest AI synthesis").
+**C. Lighting & camera physics**
+Shadow direction vs highlights disagree; missing ambient bounce or contact shadows; catchlights in eyes that don't match scene lights; reflections on metal/glass/water that look stamped on. Shallow DOF where blur ignores depth or cuts across one object illogically. **Too clean:** no plausible sensor noise/grain in shadows for a supposedly natural indoor/low-light shot (when such noise would normally appear).
 
-Respond with ONLY a valid JSON object. Do not include any Markdown formatting, code fences, or backticks, and do not add any introduction or commentary.
+**D. Edges & scene semantics**
+Object halos, mushy segmentation, background bleeding into edges. Text/signage/logos garbled, swapped letters, or inconsistent spelling if readable. Architectural lines that bend or duplicate subtly.
 
-Target JSON Structure:
+**E. "Hyper-real stock" prior**
+Faces or scenes that look like idealized catalog renders—perfect skin tone gradients, overly symmetrical styling, everything harmonized—**raise suspicion** unless optics and microtexture remain consistent with one real capture.
+
+**F. Distinguish heavy retouching**
+Beautifying a real photo rarely breaks finger count or physics of reflections. If flaws are structural/optical across regions, lean **synthetic**, not "retouched real".
+
+Output JSON only (no markdown):
+
+- "isDeepfake": boolean — **true** if likely AI/diffusion/composite-with-generative-fill style manipulation; **false** only when evidence clearly fits one authentic capture with no meaningful synthesis cues.
+- "confidence": 0–100 (use the cue-stacking logic above; stacked subtleties justify 60–80).
+- "explanation": 1–2 sentences citing **concrete** observations (body region + artifact type), not vague adjectives.
 
 {
   "isDeepfake": boolean,
@@ -281,11 +288,15 @@ Target JSON Structure:
 
         const ai = new GoogleGenAI({ apiKey });
 
-        // Prefer a single, explicitly configured model; fall back to Gemini 2.5 Flash.
-        // Stable model id per docs: "gemini-2.5-flash" ([link](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)).
-        const modelsToTry = [
-            process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        // Try primary model first, then fallbacks when a tier is overloaded (e.g. 503) or unavailable.
+        const preferred = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+        const fallbacks = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-flash-latest",
+            "gemini-pro-latest",
         ];
+        const modelsToTry = [preferred, ...fallbacks.filter((m) => m !== preferred)];
 
         let resp: any = null;
         let lastError: any = null;
@@ -310,15 +321,15 @@ Target JSON Structure:
             } catch (e: any) {
                 console.warn(`Model ${modelName} failed:`, e?.message || e);
                 lastError = e;
-                // Continue to next model on 404 (Not Found) or 429 (Rate Limit)
-                if (e.status === 404 || e.status === 429) continue;
-                // For other errors, maybe we should still try others? 
-                // Let's be robust and try others.
             }
         }
 
         if (!resp) {
-            throw lastError || new Error("All Gemini models failed");
+            const msg =
+                lastError?.message ||
+                (typeof lastError === "string" ? lastError : null) ||
+                "All Gemini models failed";
+            throw new GraphQLError(msg, { originalError: lastError });
         }
 
         // Log the raw response for debugging
@@ -410,9 +421,10 @@ Target JSON Structure:
             saved,
             scanId,
         }
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
-        return null;
+        if (err instanceof GraphQLError) throw err;
+        throw new GraphQLError(err?.message || "Image analysis failed", { originalError: err });
     }
 }
 
@@ -539,19 +551,46 @@ Rules:
 `;
 
         const ai = new GoogleGenAI({ apiKey });
-        const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        const preferred = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+        const fallbacks = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-flash-latest",
+            "gemini-pro-latest",
+        ];
+        const modelsToTry = [preferred, ...fallbacks.filter((m) => m !== preferred)];
 
-        console.log(`Trying Gemini text model (${factCheck ? "fact-check" : "detection"}): ${modelName}`);
-        const resp = await ai.models.generateContent({
-            model: modelName,
-            contents: [
-                {
-                    role: "user",
-                    parts: [{ text: prompt }],
-                },
-            ],
-            generationConfig: { temperature: 0, responseMimeType: "application/json" },
-        } as any);
+        let resp: any = null;
+        let lastError: any = null;
+        for (const modelName of modelsToTry) {
+            try {
+                console.log(
+                    `Trying Gemini text model (${factCheck ? "fact-check" : "detection"}): ${modelName}`
+                );
+                resp = await ai.models.generateContent({
+                    model: modelName,
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [{ text: prompt }],
+                        },
+                    ],
+                    generationConfig: { temperature: 0, responseMimeType: "application/json" },
+                } as any);
+                if (resp) break;
+            } catch (e: any) {
+                console.warn(`Text model ${modelName} failed:`, e?.message || e);
+                lastError = e;
+            }
+        }
+
+        if (!resp) {
+            const msg =
+                lastError?.message ||
+                (typeof lastError === "string" ? lastError : null) ||
+                "All Gemini models failed";
+            throw new GraphQLError(msg, { originalError: lastError });
+        }
 
         // Log the raw response for debugging
         try {
@@ -673,9 +712,10 @@ Rules:
             saved,
             scanId,
         };
-    } catch (err) {
+    } catch (err: any) {
         console.error("analyzeText error:", err);
-        return null;
+        if (err instanceof GraphQLError) throw err;
+        throw new GraphQLError(err?.message || "Text analysis failed", { originalError: err });
     }
 }
 
