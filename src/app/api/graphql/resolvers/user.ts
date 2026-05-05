@@ -1,6 +1,7 @@
 import db from "@/services/prisma";
 import { uploadImageBase64 } from "@/services/cloudinary";
 import { clerkClient, getAuth } from "@clerk/nextjs/server";
+import { GraphQLError } from "graphql";
 import { verifyToken } from "@/services/jwt";
 import { GoogleGenAI } from "@google/genai";
 
@@ -411,6 +412,62 @@ Target JSON Structure:
         }
     } catch (err) {
         console.error(err);
+        return null;
+    }
+}
+
+/** Persist an existing analysis to the DB without calling Gemini again (e.g. guest ran scan, then signed in). */
+export async function saveAnalysisResult(
+    _: any,
+    args: {
+        mediaType: string;
+        imageUrl?: string | null;
+        isDeepfake: boolean;
+        confidence: number;
+        explanation: string;
+    },
+    context: { req?: Request; auth?: { userId?: string } }
+) {
+    try {
+        const clerkId = context?.auth?.userId;
+        if (!clerkId) {
+            throw new GraphQLError("Sign in to save scans to your account.");
+        }
+
+        const user = await ensureUserForClerkId(clerkId);
+        if (!user) {
+            throw new GraphQLError("Could not load your account.");
+        }
+
+        const mt = args.mediaType === "text" ? "text" : "image";
+        const url = args.imageUrl?.trim() || null;
+        if (mt === "image" && !url) {
+            throw new GraphQLError("Missing image URL for this scan.");
+        }
+
+        const r = await db.scan.create({
+            data: {
+                userId: user.id,
+                mediaType: mt,
+                imageUrl: mt === "text" ? null : url,
+                isDeepfake: Boolean(args.isDeepfake),
+                confidence: typeof args.confidence === "number" ? args.confidence : 0,
+                explanation: typeof args.explanation === "string" ? args.explanation : "",
+                rawResponse: { source: "saveAnalysisResult" },
+            },
+        });
+
+        return {
+            imageUrl: mt === "text" ? null : url,
+            isDeepfake: Boolean(args.isDeepfake),
+            confidence: typeof args.confidence === "number" ? args.confidence : 0,
+            explanation: typeof args.explanation === "string" ? args.explanation : "",
+            saved: true,
+            scanId: r.id,
+        };
+    } catch (err: any) {
+        if (err instanceof GraphQLError) throw err;
+        console.error("saveAnalysisResult error:", err);
         return null;
     }
 }

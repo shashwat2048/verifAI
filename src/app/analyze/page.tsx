@@ -11,6 +11,12 @@ import { SaveShareBar } from "@/components/ui/save-share-bar";
 import { BlurIndicator } from "@/components/ui/blur-indicator";
 import LimitNotice from "@/components/ui/limit-notice";
 
+/** Same interpretation as the results card: % likelihood of AI / manipulation. */
+function aiLikenessPercent(isDeepfake: boolean, confidence: number): number {
+  const raw = typeof confidence === "number" ? confidence : 0;
+  return Math.min(100, Math.max(0, Math.round(isDeepfake ? raw : 100 - raw)));
+}
+
 export default function AnalyzePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -27,6 +33,9 @@ export default function AnalyzePage() {
     confidence: number;
     explanation: string;
     saved?: boolean;
+    /** Present after image analysis — used to save without re-running Gemini */
+    imageUrl?: string | null;
+    mediaType?: "image" | "text";
   }>(null);
   const [quota, setQuota] = useState<{ role: string; used: number; max: number; remaining: number; unlimited: boolean } | null>(null);
   const [blurScore, setBlurScore] = useState<number | null>(null);
@@ -36,6 +45,7 @@ export default function AnalyzePage() {
   const [textInput, setTextInput] = useState("");
   const [factCheck, setFactCheck] = useState(false);
   const router = useRouter();
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -232,6 +242,8 @@ export default function AnalyzePage() {
         confidence: data.confidence,
         explanation: data.explanation,
         saved: data.saved,
+        imageUrl: data.imageUrl ?? null,
+        mediaType: "image",
       });
 
       toast.success(data.saved ? "Scan saved" : "Analysis ready");
@@ -304,6 +316,8 @@ export default function AnalyzePage() {
         confidence: typeof data.confidence === "number" ? data.confidence : 0,
         explanation: data.explanation || "",
         saved: data.saved,
+        imageUrl: null as string | null,
+        mediaType: "text" as const,
       };
 
       setResult(structured);
@@ -314,6 +328,138 @@ export default function AnalyzePage() {
       toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onSaveScan() {
+    if (!result || result.saved || saveInFlightRef.current) return;
+    const mediaType = result.mediaType ?? (file ? "image" : "text");
+    if (mediaType === "image" && !result.imageUrl) {
+      toast.error("Unable to save this scan. Run the image analysis again, then save.");
+      return;
+    }
+    saveInFlightRef.current = true;
+    setError(null);
+    try {
+      const query = `mutation SaveAnalysisResult($mediaType: String!, $imageUrl: String, $isDeepfake: Boolean!, $confidence: Float!, $explanation: String!) {
+        saveAnalysisResult(mediaType: $mediaType, imageUrl: $imageUrl, isDeepfake: $isDeepfake, confidence: $confidence, explanation: $explanation) {
+          imageUrl isDeepfake confidence explanation saved scanId
+        }
+      }`;
+      const res = await fetch("/api/graphql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          query,
+          variables: {
+            mediaType,
+            imageUrl: result.imageUrl ?? null,
+            isDeepfake: result.isDeepfake,
+            confidence: result.confidence,
+            explanation: result.explanation,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || "Failed to save scan");
+      }
+      const json = await res.json();
+      if (json?.errors?.length) {
+        const msg = json.errors[0]?.message || "Save failed";
+        throw new Error(msg);
+      }
+      const data = json?.data?.saveAnalysisResult;
+      if (!data?.saved) throw new Error("Could not save scan");
+
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              saved: true,
+              imageUrl: data.imageUrl ?? prev.imageUrl,
+            }
+          : prev
+      );
+      toast.success("Scan saved");
+      try {
+        const q = `query { myQuota { role used max remaining unlimited } }`;
+        const r2 = await fetch("/api/graphql", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ query: q }) });
+        const j2 = await r2.json();
+        if (j2?.data?.myQuota) setQuota(j2.data.myQuota);
+      } catch {
+        /* noop */
+      }
+      try {
+        if (navigator.vibrate) navigator.vibrate(20);
+      } catch {
+        /* noop */
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Save failed";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      saveInFlightRef.current = false;
+    }
+  }
+
+  async function shareAnalysisResult() {
+    if (!result) return;
+    const aiPercent = aiLikenessPercent(result.isDeepfake, result.confidence);
+    const verdictShort = aiPercent >= 60 ? "Likely Fake" : "Likely Real";
+    const mediaLabel = result.mediaType === "text" ? "Text authenticity scan" : "Image authenticity scan";
+    const explanation = result.explanation?.trim() || "No summary available.";
+    const title = `VerifAI — ${verdictShort}`;
+
+    const lines: string[] = [
+      mediaLabel,
+      `Verdict: ${verdictShort}`,
+      `AI / manipulation signal: ${aiPercent}%`,
+      "",
+      "Analysis:",
+      explanation,
+    ];
+
+    const imageLink =
+      result.mediaType !== "text" && result.imageUrl?.startsWith("http") ? result.imageUrl : null;
+    if (imageLink) {
+      lines.push("", `Analyzed image (hosted): ${imageLink}`);
+    }
+
+    lines.push("", "— Shared from VerifAI");
+
+    const text = lines.join("\n");
+    const payload: ShareData = {
+      title,
+      text,
+      ...(imageLink ? { url: imageLink } : {}),
+    };
+
+    const clip = `${title}\n\n${text}`;
+
+    let shareFailed = false;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share(payload);
+        return;
+      } catch (e: unknown) {
+        const err = e as { name?: string };
+        if (err?.name === "AbortError") return;
+        shareFailed = true;
+      }
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(clip);
+        toast.success(shareFailed ? "Report copied (could not open share sheet)" : "Report copied to clipboard");
+      } else {
+        toast.error("Sharing is not available in this browser");
+      }
+    } catch {
+      toast.error("Could not share or copy this report");
     }
   }
 
@@ -501,17 +647,8 @@ export default function AnalyzePage() {
                     <div className="flex gap-2">
                       <SaveShareBar
                         canSave={!result.saved}
-                        onSave={onSubmit}
-                        onShare={() =>
-                          navigator.share
-                            ? navigator
-                                .share({
-                                  title: "VerifAI Scan Result",
-                                  text: "Deepfake detection result from VerifAI",
-                                })
-                                .catch(() => {})
-                            : null
-                        }
+                        onSave={onSaveScan}
+                        onShare={shareAnalysisResult}
                       />
                     </div>
                   </div>
@@ -519,13 +656,7 @@ export default function AnalyzePage() {
                   {/* Verdict Card */}
                   <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
                     {(() => {
-                      const raw = typeof result.confidence === "number" ? result.confidence : 0;
-                      // Interpret confidence as: how sure the model is about its deepfake vs real verdict.
-                      // For display, we want "AI-likeness": 0% = very likely real, 100% = very likely AI/deepfake.
-                      const aiPercent = Math.min(
-                        100,
-                        Math.max(0, Math.round(result.isDeepfake ? raw : 100 - raw))
-                      );
+                      const aiPercent = aiLikenessPercent(result.isDeepfake, result.confidence);
 
                       return (
                         <>

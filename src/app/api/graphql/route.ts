@@ -4,8 +4,7 @@ import { NextRequest } from "next/server";
 import { gql } from "graphql-tag";
 import { getUser, me, updateUser, getProfile, createOrUpdateProfile } from "./resolvers/user";
 import { updateUserProfile } from "./resolvers/user";
-import { analyzeLabel } from "./resolvers/user";
-import { analyzeText } from "./resolvers/user";
+import { analyzeLabel, saveAnalysisResult, analyzeText } from "./resolvers/user";
 import { myReports, getReports } from "./resolvers/user";
 import { getAuth } from "@clerk/nextjs/server";
 import { deleteReport } from "./resolvers/feature";
@@ -30,6 +29,13 @@ const typeDefs = gql`
     updateUserProfile(name: String): Response
     analyzeLabel(imageBase64: String!): AnalyzeResult
     analyzeText(input: String!, factCheck: Boolean): AnalyzeResult
+    saveAnalysisResult(
+      mediaType: String!
+      imageUrl: String
+      isDeepfake: Boolean!
+      confidence: Float!
+      explanation: String!
+    ): AnalyzeResult
     deleteReport(id: String!): Response
     migrateGuestAnalyses(items: [GuestAnalysisInput!]!): Response
   }
@@ -103,6 +109,19 @@ const resolvers = {
       // Enforce RBAC and quotas before calling resolver
       await enforceAnalyzeQuota(context.req, context.auth);
       return analyzeText(_, args, context);
+    },
+    saveAnalysisResult: async (
+      _: any,
+      args: {
+        mediaType: string;
+        imageUrl?: string | null;
+        isDeepfake: boolean;
+        confidence: number;
+        explanation: string;
+      },
+      context: any
+    ) => {
+      return saveAnalysisResult(_, args, context);
     },
     deleteReport: deleteReport,
 
