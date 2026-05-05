@@ -1,5 +1,6 @@
 import { getUserFromCookies } from "@/lib/helper";
 import { auth } from "@clerk/nextjs/server";
+import Link from "next/link";
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import HomeHeroActions from "@/components/ui/home-hero-actions";
 import HomeCards from "@/components/ui/home-cards";
@@ -61,7 +62,8 @@ export default async function Home() {
       <footer className="py-10 text-center text-sm text-muted-foreground border-t border-border/50 mt-20">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="hover:text-foreground transition-colors">VerifAI © {new Date().getFullYear()} All rights reserved.</p>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap justify-center gap-6">
+            <Link href="/about" className="hover:text-primary transition-colors">About</Link>
             <a href="#" className="hover:text-primary transition-colors">Privacy</a>
             <a href="#" className="hover:text-primary transition-colors">Terms</a>
             <a href="#" className="hover:text-primary transition-colors">Contact</a>

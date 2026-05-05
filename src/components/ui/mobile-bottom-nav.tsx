@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useUserContext } from "@/components/ui/user-context";
-import { Home, BarChart2, User, Crown, Search } from "lucide-react";
+import { Home, BarChart2, Search, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { RainbowButton } from "@/components/ui/rainbow-button";
 
 export default function MobileBottomNav() {
-  const { role } = useUserContext();
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   useEffect(() => { setMounted(true); }, []);
@@ -29,6 +26,10 @@ export default function MobileBottomNav() {
             <Link href="/" className="flex flex-col items-center gap-1 px-2 text-[11px] text-neutral-700 dark:text-neutral-200">
               <Home className="h-5 w-5" />
               <span>Home</span>
+            </Link>
+            <Link href="/about" className="flex flex-col items-center gap-1 px-2 text-[11px] text-neutral-700 dark:text-neutral-200">
+              <Info className="h-5 w-5" />
+              <span>About</span>
             </Link>
             <Link href="/analyze" className="flex flex-col items-center gap-1 px-2 text-[11px] text-neutral-700 dark:text-neutral-200">
               <Search className="h-5 w-5" />
